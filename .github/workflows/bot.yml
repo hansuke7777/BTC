@@ -3,7 +3,7 @@ name: Crypto Bot
 on:
   schedule:
     # 15分ごとに実行 (※多少ズレます)
-    - cron: '*/15 * * * *'
+    # - cron: '*/15 * * * *'
   workflow_dispatch: # 手動実行ボタンも有効化
 
 jobs:

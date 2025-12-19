@@ -1,0 +1,29 @@
+name: Crypto Bot
+
+on:
+  schedule:
+    # 15分ごとに実行 (※多少ズレます)
+    - cron: '*/15 * * * *'
+  workflow_dispatch: # 手動実行ボタンも有効化
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+
+      - name: Run script
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python crypto_bot.py

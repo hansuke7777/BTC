@@ -3,28 +3,33 @@ import pandas as pd
 import pandas_ta as ta
 import google.generativeai as genai
 import requests
-import os  # 環境変数のために追加
+import time
+from datetime import datetime
 
 # ==========================================
-# 設定エリア（GitHub Secretsから読み込む設定）
+# 設定エリア（直接ここに書き込んでください）
 # ==========================================
-GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-DISCORD_WEBHOOK_URL = os.environ.get("DISCORD_WEBHOOK_URL")
+GEMINI_API_KEY = "あなたのGemini_APIキー"
+DISCORD_WEBHOOK_URL = "あなたのDiscord_Webhook_URL"
 
 SYMBOL = 'ETH/USDT'
 TIMEFRAME = '15m'
 LIMIT = 50
+# ==========================================
 
 # Geminiの設定
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-2.0-flash-exp')
 
 def get_market_data():
+    """Bybitからデータを取得"""
     bybit = ccxt.bybit()
+    # 日本からのアクセスならこれで通ります
     ohlcv = bybit.fetch_ohlcv(SYMBOL, TIMEFRAME, limit=LIMIT)
     df = pd.DataFrame(ohlcv, columns=['timestamp', 'open', 'high', 'low', 'close', 'volume'])
-    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms') + pd.Timedelta(hours=9)
+    df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms') + pd.Timedelta(hours=9) # 日本時間
 
+    # テクニカル指標
     df['RSI'] = ta.rsi(df['close'], length=14)
     bb = ta.bbands(df['close'], length=20, std=2)
     df = pd.concat([df, bb], axis=1)
@@ -34,6 +39,7 @@ def get_market_data():
     return df
 
 def ask_gemini(df):
+    """Geminiに分析させる"""
     latest = df.iloc[-1]
     prompt = f"""
     あなたはプロトレーダー「ししゃもん」です。ユーザーはリハビリ中。
@@ -56,18 +62,46 @@ def ask_gemini(df):
         response = model.generate_content(prompt)
         return response.text
     except Exception as e:
-        return f"Error: {e}"
+        return f"Gemini Error: {e}"
 
 def send_discord(message):
     payload = {"content": message}
-    requests.post(DISCORD_WEBHOOK_URL, json=payload)
+    try:
+        requests.post(DISCORD_WEBHOOK_URL, json=payload)
+    except Exception as e:
+        print(f"Discord Error: {e}")
 
+# ==========================================
+# 実行ループ（Mac用）
+# ==========================================
 if __name__ == "__main__":
-    if not GEMINI_API_KEY or not DISCORD_WEBHOOK_URL:
-        print("Error: APIキーが設定されていません")
-        exit()
-        
-    df = get_market_data()
-    analysis = ask_gemini(df)
-    print(analysis)
-    send_discord(analysis)
+    print(f"✅ {SYMBOL} の監視を開始します（Ctrl+Cで停止）")
+    send_discord("🚀 Mac Studioで監視ボットを起動しました！")
+
+    while True:
+        try:
+            # 現在の「分」を取得
+            now = datetime.now()
+            current_minute = now.minute
+
+            # 15分足の確定タイミング（00, 15, 30, 45分）の直後に実行
+            # ※1分〜2分の遅れを持たせてデータ確定を待つ
+            if current_minute in [1, 16, 31, 46]:
+                print(f"\n[{now.strftime('%H:%M:%S')}] 分析中...")
+                
+                df = get_market_data()
+                analysis = ask_gemini(df)
+                
+                print(f"価格: {df.iloc[-1]['close']}")
+                print(analysis)
+                send_discord(analysis)
+                
+                # 連投防止のため65秒待つ
+                time.sleep(65)
+            else:
+                # タイミングが来るまで30秒待機
+                time.sleep(30)
+
+        except Exception as e:
+            print(f"エラー: {e}")
+            time.sleep(60)
